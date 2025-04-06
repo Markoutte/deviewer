@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
 
 public class Main {
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         System.setProperty( "apple.laf.useScreenMenuBar", "true" );
         System.setProperty( "apple.awt.application.appearance", "system" );
 
@@ -43,12 +43,6 @@ public class Main {
 
         var panel = new JComponent() {};
         panel.setLayout(new BorderLayout());
-        {
-            JPanel box = new JPanel();
-            box.setLayout(new BorderLayout());
-            box.add(new JLabel("No opened file", SwingConstants.CENTER), BorderLayout.CENTER);
-            panel.add(box, BorderLayout.CENTER);
-        }
         {
             JButton openFileButton = new JButton("Open...");
             openFileButton.addActionListener(e -> {
@@ -65,6 +59,12 @@ public class Main {
             openFileButton.setAlignmentX(Component.RIGHT_ALIGNMENT);
             panel.add(box, BorderLayout.NORTH);
         }
+        {
+            JPanel box = new JPanel();
+            box.setLayout(new BorderLayout());
+            box.add(new JLabel("No opened file", SwingConstants.CENTER), BorderLayout.CENTER);
+            panel.add(box, BorderLayout.CENTER);
+        }
 
         frame.setContentPane(panel);
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -80,9 +80,9 @@ public class Main {
             StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.First);
             while ((event = reader.readEvent()) != null) {
                 eventsByGroup.computeIfAbsent(event.getClass(), eventClass -> new ArrayList<>()).add(event);
-                List<StackFrame> chain = new ArrayList<>();
-                chain.add(allFrame);
                 if (event instanceof ExecutionSample sample) {
+                    final List<StackFrame> chain = new ArrayList<>();
+                    chain.add(allFrame);
                     var stacktrace = reader.stackTraces.get(sample.stackTraceId);
                     for (int i = stacktrace.methods.length - 1; i >= 0; i--) {
                         chain.add(methodString(
@@ -91,12 +91,15 @@ public class Main {
                                 StackFrameType.byId(stacktrace.types[i])
                         ));
                     }
+                    stackTraces.add(chain);
                 }
-                stackTraces.add(chain);
             }
-
-            panel.remove(0);
-            panel.add(new JScrollPane(getJTree(allFrame, stackTraces)), BorderLayout.CENTER);
+            panel.remove(1);
+            var tabbed = new JTabbedPane();
+            IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
+            tabbed.addTab("Flame Graph", new JScrollPane(icicleGraphComponent));
+            tabbed.addTab("Call Tree", new JScrollPane(getJTree(allFrame, stackTraces)));
+            panel.add(tabbed, BorderLayout.CENTER);
             panel.revalidate();
             panel.repaint();
         } catch (IOException e) {
@@ -116,7 +119,7 @@ public class Main {
 
             @Override
             public Object getRoot() {
-                return trie.get(Collections.singleton(root));
+                return trie.getImpl(Collections.singleton(root));
             }
 
             @Override

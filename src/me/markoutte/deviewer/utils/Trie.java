@@ -50,7 +50,7 @@ public class Trie<T, K> implements Iterable<List<T>> {
      * @return removed node if value exists.
      */
     public Node<T> remove(Iterable<T> values) {
-        NodeImpl<T, K> node = findImpl(values);
+        NodeImpl<T, K> node = findImpl(values, false);
         if (node == null) return null;
 
         if (node.count == 1) {
@@ -78,7 +78,7 @@ public class Trie<T, K> implements Iterable<List<T>> {
      * @return removed node if value exists
      */
     public Node<T> removeCompletely(Iterable<T> values) {
-        NodeImpl<T, K> node = findImpl(values);
+        NodeImpl<T, K> node = findImpl(values, false);
         if (node == null) return null;
 
         if (node.count > 0 && node.children.isEmpty()) {
@@ -109,7 +109,11 @@ public class Trie<T, K> implements Iterable<List<T>> {
     }
 
     public Node<T> get(Iterable<T> values) {
-        return findImpl(values);
+        return findImpl(values, false);
+    }
+
+    public Node<T> getImpl(Iterable<T> values) {
+        return findImpl(values, true);
     }
 
     public List<T> get(Node<T> node) {
@@ -124,7 +128,7 @@ public class Trie<T, K> implements Iterable<List<T>> {
                 .collect(Collectors.toUnmodifiableList());
     }
 
-    private NodeImpl<T, K> findImpl(Iterable<T> values) {
+    private NodeImpl<T, K> findImpl(Iterable<T> values, boolean raw) {
         Iterator<T> iterator = values.iterator();
         if (!iterator.hasNext()) return null;
 
@@ -140,7 +144,7 @@ public class Trie<T, K> implements Iterable<List<T>> {
             if (node == null) return null;
         }
 
-        return node.count > 0 ? node : null;
+        return raw || node.count > 0 ? node : null;
     }
 
     @Override
