@@ -10,56 +10,61 @@ import one.jfr.event.Event;
 import one.jfr.event.ExecutionSample;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 import java.awt.*;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Main {
 
     public static void main(String[] args) throws IOException {
-        var reader = new JfrReader("/Users/markoutte/Snapshots/Main_2025_02_20_191719.jfr");
-        Event event;
-        var eventsByGroup = new HashMap<Class<? extends Event>, List<Event>>();
-        var stackTraces = new Trie<StackFrame, StackFrame>(input -> input);
-        StackFrame allFrame = new StackFrame("Everything", StackFrameType.First);
-        while ((event = reader.readEvent()) != null) {
-            eventsByGroup.computeIfAbsent(event.getClass(), eventClass -> new ArrayList<>()).add(event);
-            List<StackFrame> chain = new ArrayList<>();
-            chain.add(allFrame);
-            if (event instanceof ExecutionSample sample) {
-                var stacktrace = reader.stackTraces.get(sample.stackTraceId);
-                for (int i = stacktrace.methods.length - 1; i >= 0; i--) {
-                    chain.add(new StackFrame(
-                            methodString(reader, stacktrace.methods[i]),
-                            StackFrameType.byId(stacktrace.types[i])
-                    ));
-                }
-            }
-            stackTraces.add(chain);
-        };
-
         System.setProperty( "apple.laf.useScreenMenuBar", "true" );
         System.setProperty( "apple.awt.application.appearance", "system" );
 
         FlatLightLaf.setup();
-        var frame = new JFrame("Univier");
+        var frame = new JFrame("");
         if( SystemInfo.isMacFullWindowContentSupported ) {
-//            frame.getRootPane().putClientProperty( "apple.awt.fullWindowContent", true );
+            frame.getRootPane().putClientProperty( "apple.awt.fullWindowContent", true );
             frame.getRootPane().putClientProperty( "apple.awt.transparentTitleBar", true );
         }
 
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.PAGE_AXIS));
-        panel.add(new JScrollPane(getJTree(allFrame, stackTraces)), BorderLayout.CENTER);
+        var panel = new JComponent() {};
+        panel.setLayout(new BorderLayout());
+        {
+            JPanel box = new JPanel();
+            box.setLayout(new BorderLayout());
+            box.add(new JLabel("No opened file", SwingConstants.CENTER), BorderLayout.CENTER);
+            panel.add(box, BorderLayout.CENTER);
+        }
+        {
+            JButton openFileButton = new JButton("Open...");
+            openFileButton.addActionListener(e -> {
+                JFileChooser fc = new JFileChooser();
+                if( fc.showOpenDialog( openFileButton ) == JFileChooser.APPROVE_OPTION ) {
+                    File file = fc.getSelectedFile();
+                    reload(panel, file);
+                }
+            });
+            JPanel box = new JPanel();
+            box.setLayout(new BoxLayout(box, BoxLayout.PAGE_AXIS));
+            box.setBorder(new EmptyBorder(5, 5, 5, 10));
+            box.add(openFileButton);
+            openFileButton.setAlignmentX(Component.RIGHT_ALIGNMENT);
+            panel.add(box, BorderLayout.NORTH);
+        }
 
         frame.setContentPane(panel);
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -67,12 +72,44 @@ public class Main {
         frame.setVisible(true);
     }
 
+    private static void reload(JComponent panel, File file) {
+        try (var reader = new JfrReader(file.getAbsolutePath())) {
+            Event event;
+            var eventsByGroup = new HashMap<Class<? extends Event>, List<Event>>();
+            var stackTraces = new Trie<StackFrame, StackFrame>(input -> input);
+            StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.First);
+            while ((event = reader.readEvent()) != null) {
+                eventsByGroup.computeIfAbsent(event.getClass(), eventClass -> new ArrayList<>()).add(event);
+                List<StackFrame> chain = new ArrayList<>();
+                chain.add(allFrame);
+                if (event instanceof ExecutionSample sample) {
+                    var stacktrace = reader.stackTraces.get(sample.stackTraceId);
+                    for (int i = stacktrace.methods.length - 1; i >= 0; i--) {
+                        chain.add(methodString(
+                                reader,
+                                stacktrace.methods[i],
+                                StackFrameType.byId(stacktrace.types[i])
+                        ));
+                    }
+                }
+                stackTraces.add(chain);
+            }
+
+            panel.remove(0);
+            panel.add(new JScrollPane(getJTree(allFrame, stackTraces)), BorderLayout.CENTER);
+            panel.revalidate();
+            panel.repaint();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
     private static JTree getJTree(StackFrame root, Trie<StackFrame, StackFrame> trie) {
         var jTree = new JTree();
         jTree.setLargeModel(true);
         jTree.setShowsRootHandles(true);
-        jTree.setRootVisible(true);
-        jTree.setRowHeight(24);
+//        jTree.setRootVisible(true);
         jTree.setModel(new TreeModel() {
 
             private final List<TreeModelListener> listeners = new ArrayList<>();
@@ -124,9 +161,16 @@ public class Main {
             public Component getTreeCellRendererComponent(JTree tree1, Object value, boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
                 Component component = super.getTreeCellRendererComponent(tree1, value, sel, expanded, leaf, row, hasFocus);
                 if (component instanceof JLabel label) {
-                    label.setText("%s (samples: %d)".formatted(
-                            ((Trie.Node<StackFrame>) value).getData().method(),
-                            ((Trie.Node<StackFrame>) value).getCount()
+                    Trie.Node<StackFrame> frameNode = (Trie.Node<StackFrame>) value;
+                    StackFrame frame = frameNode.getData();
+                    label.setText("<html><body><b>%d</b> %s <span color=gray>%s</span>".formatted(
+                            frameNode.getHit(),
+                            "%s(%s)".formatted(
+                                    frame.methodName(),
+                                    String.join(",", frame.parameters())
+                            ),
+                            frame.className(),
+                            "frame.method()"
                     ));
                 }
                 return component;
@@ -135,13 +179,62 @@ public class Main {
         return jTree;
     }
 
-    private static String methodString(JfrReader reader, long method) {
+    private static StackFrame methodString(JfrReader reader, long method, StackFrameType type) {
         var cls = reader.classes.get(reader.methods.get(method).cls);
         var methodRef = reader.methods.get(method);
-        return "%s.%s(%s)".formatted(
-            new String(Objects.requireNonNullElse(reader.symbols.get(cls.name), new byte[0])),
-            new String(reader.symbols.get(methodRef.name))
-            , new String(reader.symbols.get(methodRef.sig))
-        ).intern();
+        List<String> parameters = jvmNameToCanonical(new String(reader.symbols.get(methodRef.sig)));
+        String returnValue = parameters.removeLast();
+        return new StackFrame(
+                Optional.ofNullable(reader.symbols.get(cls.name))
+                        .filter(bytes -> bytes.length > 0)
+                        .map(String::new)
+                        .map(s -> s.replace('/', '.'))
+                        .orElse(null),
+                new String(reader.symbols.get(methodRef.name)),
+                parameters,
+                returnValue,
+                type
+        );
+    }
+
+    private static final Pattern pattern = Pattern.compile("\\((L.+;|V|Z|B|C|S|I|J|F|D)*\\)(L.+;|V|Z|B|C|S|I|J|F|D)");
+
+    private static List<String> jvmNameToCanonical(String name) {
+        Matcher matcher = pattern.matcher(name);
+        if (matcher.matches()) {
+            var parameters = name.toCharArray();
+            List<String> list = new ArrayList<>();
+            for (int i = 0; i < parameters.length; i++) {
+                switch (parameters[i]) {
+                    case 'V': list.add("void"); break;
+                    case 'Z': list.add("boolean"); break;
+                    case 'B': list.add("byte"); break;
+                    case 'C': list.add("char"); break;
+                    case 'S': list.add("short"); break;
+                    case 'I': list.add("int"); break;
+                    case 'J': list.add("long"); break;
+                    case 'F': list.add("float"); break;
+                    case 'D': list.add("double"); break;
+                    case 'L': {
+                        var j = i + 1;
+                        while (parameters[j] != ';') {
+                            j++;
+                        }
+                        char[] className = Arrays.copyOfRange(parameters, i + 1, j);
+                        for (int c = 0; c < className.length; c++) {
+                            if (className[c] == '/') {
+                                className[c] = '.';
+                            }
+                        }
+                        list.add(new String(className));
+                        i = j;
+                    }
+                }
+            }
+            return list;
+        }
+        var list = new ArrayList<String>(1);
+        list.add(name);
+        return list;
     }
 }

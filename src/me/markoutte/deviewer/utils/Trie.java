@@ -29,11 +29,13 @@ public class Trie<T, K> implements Iterable<List<T>> {
         T root = iterator.next();
         K key = keyExtractor.extractKey(root);
         NodeImpl<T, K> node = roots.computeIfAbsent(key, k -> new NodeImpl<>(root, null));
+        node.hit++;
         while (iterator.hasNext()) {
             T value = iterator.next();
             key = keyExtractor.extractKey(value);
             final var fNode = node;
             node = node.children.computeIfAbsent(key, k -> new NodeImpl<>(value, fNode));
+            node.hit++;
         }
         node.count++;
         implementations.put(node, node);
@@ -116,7 +118,10 @@ public class Trie<T, K> implements Iterable<List<T>> {
     }
 
     public List<Node<T>> children(Node<T> parent) {
-        return ((NodeImpl<T, K>) parent).children.values().stream().collect(Collectors.toUnmodifiableList());
+        return ((NodeImpl<T, K>) parent).children.values()
+                .stream()
+                .sorted(Comparator.comparingInt(value -> -value.hit))
+                .collect(Collectors.toUnmodifiableList());
     }
 
     private NodeImpl<T, K> findImpl(Iterable<T> values) {
@@ -174,6 +179,8 @@ public class Trie<T, K> implements Iterable<List<T>> {
         U getData();
 
         int getCount();
+
+        int getHit();
     }
 
     private static class NodeImpl<U, V> implements Node<U> {
@@ -182,12 +189,14 @@ public class Trie<T, K> implements Iterable<List<T>> {
         private final NodeImpl<U, V> parent;
         private int count;
         private final Map<V, NodeImpl<U, V>> children;
+        private int hit;
 
         public NodeImpl(U data, NodeImpl<U, V> parent) {
             this.data = data;
             this.parent = parent;
             this.count = 0;
             this.children = new HashMap<>();
+            this.hit = 0;
         }
 
         @Override
@@ -198,6 +207,11 @@ public class Trie<T, K> implements Iterable<List<T>> {
         @Override
         public int getCount() {
             return count;
+        }
+
+        @Override
+        public int getHit() {
+            return hit;
         }
     }
 
@@ -210,6 +224,11 @@ public class Trie<T, K> implements Iterable<List<T>> {
 
         @Override
         public int getCount() {
+            return 0;
+        }
+
+        @Override
+        public int getHit() {
             return 0;
         }
     }
