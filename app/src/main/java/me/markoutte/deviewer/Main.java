@@ -97,7 +97,10 @@ public class Main {
             panel.remove(1);
             var tabbed = new JTabbedPane();
             IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
-            tabbed.addTab("Flame Graph", new JScrollPane(icicleGraphComponent));
+            JScrollPane scrollPane = new JScrollPane(icicleGraphComponent);
+            scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+            tabbed.addTab("Flame Graph", scrollPane);
             tabbed.addTab("Call Tree", new JScrollPane(getJTree(allFrame, stackTraces)));
             panel.add(tabbed, BorderLayout.CENTER);
             panel.revalidate();
