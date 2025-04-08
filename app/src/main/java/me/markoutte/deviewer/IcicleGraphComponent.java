@@ -18,7 +18,7 @@ public class IcicleGraphComponent extends JComponent {
     private List<Rectangle> rectangles = new ArrayList<>();
     private int maxDepth = 0;
     private double scale = 1.0;
-    private final double FACTOR = 1.01;
+    private final double FACTOR = 1.2;
     private Point point = null;
     private Rectangle hoveredRectangle = null;
 
@@ -44,11 +44,9 @@ public class IcicleGraphComponent extends JComponent {
             if (e.isControlDown()) {
                 e.consume();
                 double factor = FACTOR;
-                if (e.getPreciseWheelRotation() < 0) {
+                if (e.getPreciseWheelRotation() >= 0) {
                     factor = 1 / FACTOR;
                 }
-                scale *= factor;
-                scale = Math.max(1.0, scale);
                 resizeComponent(e.getX(), e.getY(), factor);
             } else {
                 comp.getParent().dispatchEvent(e);
@@ -79,7 +77,6 @@ public class IcicleGraphComponent extends JComponent {
                     hoveredRectangle = null;
                     IcicleGraphComponent.this.setPreferredSize(new Dimension(newWidth, newHeight));
                     container.revalidate();
-                    container.repaint();
                     SwingUtilities.invokeLater(() -> {
                         container.setViewPosition(new Point(newX, newY));
                     });
@@ -88,16 +85,19 @@ public class IcicleGraphComponent extends JComponent {
         });
     }
 
-    private void resizeComponent(int x, int y, double scale) {
-        JViewport parent = (JViewport) getParent();
-        java.awt.Rectangle viewRect = parent.getViewRect();
+    private void resizeComponent(int mx, int my, double scale) {
+        this.scale *= scale;
+        this.scale = Math.max(1.0, this.scale);
+        JViewport container = (JViewport) getParent();
+        java.awt.Rectangle viewRect = container.getViewRect();
         IcicleGraphComponent.this.setPreferredSize(
-                new Dimension((int) (this.scale * parent.getWidth()), maxDepth * 24)
+                new Dimension((int) (this.scale * container.getWidth()), maxDepth * 24)
         );
-        int nx = (int) Math.round(scale * (x + viewRect.x) - x);
-        parent.setViewPosition(new Point(Math.max(nx, 0), viewRect.y));
-        parent.revalidate();
-        parent.repaint();
+        container.revalidate();
+        int nx = (int) Math.round(scale * (mx + viewRect.x) - mx);
+        SwingUtilities.invokeLater(() -> {
+            container.setViewPosition(new Point(Math.max(nx, 0), viewRect.y));
+        });
     }
 
     private void traverse(Trie<StackFrame, StackFrame> trie, Trie.Node<StackFrame> node, double start, double end, int depth) {
