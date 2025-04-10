@@ -129,7 +129,7 @@ public class Main {
         var cls = reader.classes.get(reader.methods.get(method).cls);
         var methodRef = reader.methods.get(method);
         List<String> parameters = jvmNameToCanonical(new String(reader.symbols.get(methodRef.sig)));
-        String returnValue = parameters.removeLast();
+        String returnValue = parameters.remove(parameters.size() - 1);
         return new StackFrame(
                 Optional.ofNullable(reader.symbols.get(cls.name))
                         .filter(bytes -> bytes.length > 0)

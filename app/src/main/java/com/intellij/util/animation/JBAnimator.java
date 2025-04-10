@@ -194,7 +194,7 @@ public final class JBAnimator implements AutoCloseable {
                     double end = start + (double) animation.getDuration() / duration;
                     if (start <= timeline) try {
                         double current = (timeline - start) / (end - start);
-                        animation.update(Math.clamp(current, 0.0, 1.0));
+                        animation.update(Math.min(Math.max(current, 0.0), 1.0));
                         animation.fireEvent(Animation.Phase.UPDATED);
                     }
                     catch (Throwable t) {
