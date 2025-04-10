@@ -107,7 +107,9 @@ public class Main {
             tabbed.putClientProperty("JTabbedPane.leadingComponent", emptyPane);
             IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
             JScrollPane scrollPane1 = new JScrollPane(icicleGraphComponent);
+            scrollPane1.putClientProperty("JScrollPane.smoothScrolling", true);
             scrollPane1.getVerticalScrollBar().setUnitIncrement(24);
+            scrollPane1.getHorizontalScrollBar().setUnitIncrement(24);
             scrollPane1.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
             scrollPane1.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
             tabbed.addTab("Flame Graph", scrollPane1);

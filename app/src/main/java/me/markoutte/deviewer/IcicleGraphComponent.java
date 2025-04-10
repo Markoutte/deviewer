@@ -1,14 +1,17 @@
 package me.markoutte.deviewer;
 
+import com.formdev.flatlaf.util.Animator;
+import com.intellij.ui.scroll.LatchingScroll;
+import com.intellij.util.animation.Animations;
+import com.intellij.util.animation.Easing;
+import com.intellij.util.animation.JBAnimator;
 import me.markoutte.deviewer.jfr.StackFrame;
 import me.markoutte.deviewer.utils.Trie;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.List;
 import java.util.ArrayList;
@@ -21,6 +24,7 @@ public class IcicleGraphComponent extends JComponent {
     private final double FACTOR = 1.05;
     private Point point = null;
     private Rectangle hoveredRectangle = null;
+    private JBAnimator animator = new JBAnimator();
 
     public IcicleGraphComponent(StackFrame root, Trie<StackFrame, StackFrame> trie) {
         traverse(trie, trie.getImpl(Collections.singleton(root)), 0.0, 1.0, 0);
@@ -30,6 +34,15 @@ public class IcicleGraphComponent extends JComponent {
     public void addNotify() {
         super.addNotify();
         JViewport viewport = (JViewport) getParent();
+        viewport.addMouseWheelListener(new MouseWheelListener() {
+            LatchingScroll ls = new LatchingScroll();
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                if (ls.shouldBeIgnored(e)) {
+                    e.consume();
+                }
+            }
+        });
         viewport.addMouseWheelListener(e -> {
             Component comp = e.getComponent();
             if (e.isControlDown()) {
@@ -59,19 +72,33 @@ public class IcicleGraphComponent extends JComponent {
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2 && hoveredRectangle != null) {
                     java.awt.Rectangle rect = viewport.getViewRect();
+                    int oldWidth = (int) Math.round(rect.width * scale);
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
                     int newY = rect.y;
                     point = null;
                     hoveredRectangle = null;
-                    viewport.setViewSize(new Dimension((int) Math.round(scale * viewport.getWidth()), maxDepth * 24));
-                    viewport.setViewPosition(new Point(newX, newY));
-                    viewport.revalidate();
-                    viewport.repaint();
+                    animator.animate(Animations.animation(
+                            new java.awt.Rectangle(rect.x, rect.y, oldWidth, maxDepth * 24),
+                            new java.awt.Rectangle(newX, newY, newWidth, maxDepth * 24),
+                            value -> {
+                        try {
+                            SwingUtilities.invokeAndWait(() -> {
+                                viewport.setViewSize(value.getSize());
+                                viewport.setViewPosition(value.getLocation());
+                                viewport.invalidate();
+                                viewport.repaint();
+                            });
+                        } catch (InterruptedException | InvocationTargetException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }).setDuration(500).setEasing(Easing.EASE_IN_OUT).setDelay(8));
                 }
             }
         });
+        // force resizing
+        resizeComponent(0, 0, 1.0);
     }
 
     private void resizeComponent(int mx, int my, double scale) {

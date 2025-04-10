@@ -4,6 +4,7 @@ package com.intellij.util.animation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.*;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
