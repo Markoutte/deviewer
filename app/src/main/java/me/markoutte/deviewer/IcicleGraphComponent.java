@@ -1,11 +1,11 @@
 package me.markoutte.deviewer;
 
-import com.formdev.flatlaf.util.Animator;
 import com.intellij.ui.scroll.LatchingScroll;
 import com.intellij.util.animation.Animations;
 import com.intellij.util.animation.Easing;
 import com.intellij.util.animation.JBAnimator;
 import me.markoutte.deviewer.jfr.StackFrame;
+import me.markoutte.deviewer.jfr.StackFrameType;
 import me.markoutte.deviewer.utils.Trie;
 
 import javax.swing.*;
@@ -135,10 +135,11 @@ public class IcicleGraphComponent extends JComponent {
         java.awt.Rectangle bounds = getBounds();
         g.setColor(Color.WHITE);
         g.fillRect(0, 0, bounds.width, bounds.height);
-        Color green = new Color(68, 236, 190);
-        Color greenh = new Color(31, 209, 160);
-        Color green2 = new Color(25, 131, 104);
         java.awt.Rectangle rect = getVisibleRect();
+        Color[][] colors = new Color[StackFrameType.values().length][];
+        for (StackFrameType value : StackFrameType.values()) {
+            colors[value.ordinal()] = getFrameColor(value);
+        }
         for (Rectangle rectangle : rectangles) {
             int x = (int) (rectangle.start * bounds.width);
             int width = (int) ((rectangle.end - rectangle.start) * bounds.width);
@@ -148,12 +149,13 @@ public class IcicleGraphComponent extends JComponent {
                 continue;
             }
             boolean hovered = point != null && point.x > x && point.y > y && point.x < x + width && point.y < y + height;
+            var clrs = colors[rectangle.frame.type().ordinal()];
             Graphics2D g2 = (Graphics2D) g.create(x, y, width, height);
-            g2.setColor(!hovered ? green : greenh);
+            g2.setColor(!hovered ? clrs[0] : clrs[1]);
             g2.fillRect(0, 0, width, height);
-            g2.setColor(green2);
+            g2.setColor(clrs[2]);
             g2.drawRect(0, 0, width, height);
-            g2.setColor(Color.BLACK);
+            g2.setColor(clrs[3]);
             int max = Math.max(0, rect.x - x);
             g2.drawString(rectangle.frame.methodName(), max + 5, 16);
             g2.dispose();
@@ -163,10 +165,48 @@ public class IcicleGraphComponent extends JComponent {
         }
     }
 
-    private static record Rectangle(
+    private record Rectangle(
             double start,
             double end,
             int depth,
             StackFrame frame
     ) {}
+
+    private Color[] getFrameColor(StackFrameType type) {
+        switch (type) {
+            case INTERPRETED -> {
+                return new Color[] {
+                        new Color(68, 236, 71),
+                        new Color(40, 179, 42),
+                        new Color(26, 96, 28),
+                        Color.BLACK
+                };
+            }
+            case JIT_COMPILED, C1_COMPILED, INLINED, NATIVE -> {
+                return new Color[] {
+                        new Color(68, 236, 190),
+                        new Color(31, 209, 160),
+                        new Color(25, 131, 104),
+                        Color.BLACK
+                };
+            }
+            case CPP, KERNEL -> {
+                return new Color[] {
+                        new Color(68, 197, 236),
+                        new Color(54, 173, 209),
+                        new Color(22, 135, 168),
+                        Color.BLACK
+                };
+            }
+            case UNDEFINED -> {
+                return new Color[] {
+                        Color.WHITE,
+                        new Color(211, 211, 211),
+                        new Color(168, 168, 168),
+                        Color.BLACK
+                };
+            }
+        }
+        throw new RuntimeException();
+    }
 }

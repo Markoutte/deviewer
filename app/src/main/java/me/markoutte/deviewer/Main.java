@@ -82,7 +82,7 @@ public class Main {
             Event event;
             var eventsByGroup = new HashMap<Class<? extends Event>, List<Event>>();
             var stackTraces = new Trie<StackFrame, StackFrame>(input -> input);
-            StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.First);
+            StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.UNDEFINED);
             while ((event = reader.readEvent()) != null) {
                 eventsByGroup.computeIfAbsent(event.getClass(), eventClass -> new ArrayList<>()).add(event);
                 if (event instanceof ExecutionSample sample) {
@@ -93,7 +93,7 @@ public class Main {
                         chain.add(methodString(
                                 reader,
                                 stacktrace.methods[i],
-                                StackFrameType.byId(stacktrace.types[i])
+                                StackFrameType.values()[stacktrace.types[i]]
                         ));
                     }
                     stackTraces.add(chain);
@@ -112,7 +112,7 @@ public class Main {
             scrollPane1.getHorizontalScrollBar().setUnitIncrement(24);
             scrollPane1.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
             scrollPane1.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-            tabbed.addTab("Flame Graph", scrollPane1);
+            tabbed.addTab("Icicle Graph", scrollPane1);
             JScrollPane scrollPane2 = new JScrollPane(new CallTree(allFrame, stackTraces));
             scrollPane2.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
             tabbed.addTab("Call Tree", scrollPane2);
