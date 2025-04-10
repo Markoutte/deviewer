@@ -10,6 +10,7 @@ import one.jfr.event.Event;
 import one.jfr.event.ExecutionSample;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -51,14 +52,22 @@ public class Main {
 
         if (SystemInfo.isMacFullWindowContentSupported) {
             frame.getRootPane().putClientProperty( "apple.awt.fullWindowContent", true );
-//            frame.getRootPane().putClientProperty( "apple.awt.transparentTitleBar", true );
+            frame.getRootPane().putClientProperty( "apple.awt.transparentTitleBar", true );
         }
 
         panel.setLayout(new BorderLayout());
         {
             JPanel box = new JPanel();
-            box.setLayout(new BorderLayout());
-            box.add(new JLabel("No opened file", SwingConstants.CENTER), BorderLayout.CENTER);
+            box.setLayout(new GridBagLayout());
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0;
+            gbc.weighty = 1.0;
+            gbc.anchor = GridBagConstraints.CENTER;
+            JButton button = new JButton("Open file...");
+            button.addActionListener(al);
+            box.add(button, gbc);
             panel.add(box, BorderLayout.CENTER);
         }
 
@@ -92,6 +101,10 @@ public class Main {
             }
             panel.removeAll();
             var tabbed = new JTabbedPane();
+            tabbed.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+            JPanel emptyPane = new JPanel();
+            emptyPane.setBorder(new EmptyBorder(0, 60, 0, 0));
+            tabbed.putClientProperty("JTabbedPane.leadingComponent", emptyPane);
             IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
             JScrollPane scrollPane1 = new JScrollPane(icicleGraphComponent);
             scrollPane1.getVerticalScrollBar().setUnitIncrement(24);

@@ -15,10 +15,10 @@ import java.util.ArrayList;
 
 public class IcicleGraphComponent extends JComponent {
 
-    private List<Rectangle> rectangles = new ArrayList<>();
+    private final List<Rectangle> rectangles = new ArrayList<>();
     private int maxDepth = 0;
     private double scale = 1.0;
-    private final double FACTOR = 1.2;
+    private final double FACTOR = 1.05;
     private Point point = null;
     private Rectangle hoveredRectangle = null;
 
@@ -29,17 +29,8 @@ public class IcicleGraphComponent extends JComponent {
     @Override
     public void addNotify() {
         super.addNotify();
-        JViewport container = (JViewport) getParent();
-        container.addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                JViewport component = (JViewport) e.getComponent();
-                java.awt.Rectangle viewRect = component.getViewRect();
-                resizeComponent(0, 0, 1.0);
-                container.removeComponentListener(this);
-            }
-        });
-        container.addMouseWheelListener(e -> {
+        JViewport viewport = (JViewport) getParent();
+        viewport.addMouseWheelListener(e -> {
             Component comp = e.getComponent();
             if (e.isControlDown()) {
                 e.consume();
@@ -52,10 +43,10 @@ public class IcicleGraphComponent extends JComponent {
                 comp.getParent().dispatchEvent(e);
             }
         });
-        container.addMouseMotionListener(new MouseAdapter() {
+        viewport.addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                Point position = container.getViewPosition();
+                Point position = viewport.getViewPosition();
                 point = new Point(
                         position.x + e.getX(),
                         position.y + e.getY()
@@ -63,41 +54,40 @@ public class IcicleGraphComponent extends JComponent {
                 repaint();
             }
         });
-        container.addMouseListener(new MouseAdapter() {
+        viewport.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2 && hoveredRectangle != null) {
-                    java.awt.Rectangle rect = container.getViewRect();
+                    java.awt.Rectangle rect = viewport.getViewRect();
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
-                    int newHeight = 24 * maxDepth;
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
                     int newY = rect.y;
                     point = null;
                     hoveredRectangle = null;
-                    IcicleGraphComponent.this.setPreferredSize(new Dimension(newWidth, newHeight));
-                    container.revalidate();
-                    SwingUtilities.invokeLater(() -> {
-                        container.setViewPosition(new Point(newX, newY));
-                    });
+                    viewport.setViewSize(new Dimension((int) Math.round(scale * viewport.getWidth()), maxDepth * 24));
+                    viewport.setViewPosition(new Point(newX, newY));
+                    viewport.revalidate();
+                    viewport.repaint();
                 }
             }
         });
     }
 
     private void resizeComponent(int mx, int my, double scale) {
-        this.scale *= scale;
-        this.scale = Math.max(1.0, this.scale);
-        JViewport container = (JViewport) getParent();
-        java.awt.Rectangle viewRect = container.getViewRect();
-        IcicleGraphComponent.this.setPreferredSize(
-                new Dimension((int) (this.scale * container.getWidth()), maxDepth * 24)
-        );
-        container.revalidate();
+        this.scale = Math.max(this.scale * scale, 1.0);
+        JViewport viewport = (JViewport) getParent();
+        java.awt.Rectangle viewRect = viewport.getViewRect();
         int nx = (int) Math.round(scale * (mx + viewRect.x) - mx);
-        SwingUtilities.invokeLater(() -> {
-            container.setViewPosition(new Point(Math.max(nx, 0), viewRect.y));
-        });
+        viewport.setViewSize(new Dimension((int) Math.round(this.scale * viewport.getWidth()), maxDepth * 24));
+        viewport.setViewPosition(new Point(Math.max(nx, 0), viewRect.y));
+        viewport.revalidate();
+        viewport.repaint();
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+        return super.getSize();
     }
 
     private void traverse(Trie<StackFrame, StackFrame> trie, Trie.Node<StackFrame> node, double start, double end, int depth) {
