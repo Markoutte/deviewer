@@ -56,6 +56,32 @@ public class IcicleGraphComponent extends JComponent {
                 comp.getParent().dispatchEvent(e);
             }
         });
+        MouseAdapter adapter = new MouseAdapter() {
+            Point start;
+            @Override
+            public void mousePressed(MouseEvent e) {
+                start = e.getPoint();
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                start = null;
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (start != null) {
+                    JViewport viewport = (JViewport) e.getComponent();
+                    viewport.setViewPosition(new Point(
+                            Math.max(0, viewport.getViewPosition().x + start.x - e.getX()),
+                            Math.max(0, viewport.getViewPosition().y + start.y - e.getY())
+                    ));
+                    start = e.getPoint();
+                }
+            }
+        };
+        viewport.addMouseListener(adapter);
+        viewport.addMouseMotionListener(adapter);
         viewport.addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
@@ -157,7 +183,7 @@ public class IcicleGraphComponent extends JComponent {
             g2.drawRect(0, 0, width, height);
             g2.setColor(clrs[3]);
             int max = Math.max(0, rect.x - x);
-            g2.drawString(rectangle.frame.methodName(), max + 5, 16);
+            g2.drawString(generateString(rectangle.frame, g2, width - 5), max + 5, 16);
             g2.dispose();
             if (hovered) {
                 hoveredRectangle = rectangle;
@@ -172,17 +198,52 @@ public class IcicleGraphComponent extends JComponent {
             StackFrame frame
     ) {}
 
+    private String generateString(StackFrame frame, Graphics2D g2d, int maxWidth) {
+        if (frame.type() == StackFrameType.INTERPRETED ||
+                frame.type() == StackFrameType.JIT_COMPILED ||
+                frame.type() == StackFrameType.C1_COMPILED ||
+                frame.type() == StackFrameType.INLINED) {
+            String clsName = frame.className();
+            if (clsName == null) {
+                return frame.methodName();
+            } else {
+                String fullName = "%s.%s".formatted(frame.className(), frame.methodName());
+                FontMetrics fontMetrics = g2d.getFontMetrics();
+                if (fontMetrics.stringWidth(fullName) < maxWidth) {
+                    return fullName;
+                }
+                String[] split = frame.className().split("\\.");
+                StringBuilder packages = new StringBuilder();
+                for (int i = 0; i < split.length - 1; i++) {
+                    packages.append(split[i].charAt(0));
+                    packages.append(".");
+                }
+                String shortPackages = "%s.%s".formatted(packages + split[split.length - 1], frame.methodName());
+                if (fontMetrics.stringWidth(shortPackages) < maxWidth) {
+                    return shortPackages;
+                }
+                String onlyClassName = "%s.%s".formatted(split[split.length - 1], frame.methodName());
+                if (fontMetrics.stringWidth(onlyClassName) < maxWidth) {
+                    return onlyClassName;
+                }
+                return frame.methodName();
+            }
+        } else {
+            return frame.methodName();
+        }
+    }
+
     private Color[] getFrameColor(StackFrameType type) {
         switch (type) {
-            case INTERPRETED -> {
+            case INTERPRETED, JIT_COMPILED, C1_COMPILED, INLINED -> {
                 return new Color[] {
-                        new Color(68, 236, 71),
-                        new Color(40, 179, 42),
-                        new Color(26, 96, 28),
+                        new Color(187, 151, 250),
+                        new Color(150, 116, 211),
+                        new Color(106, 83, 147),
                         Color.BLACK
                 };
             }
-            case JIT_COMPILED, C1_COMPILED, INLINED, NATIVE -> {
+            case CPP, KERNEL -> {
                 return new Color[] {
                         new Color(68, 236, 190),
                         new Color(31, 209, 160),
@@ -190,7 +251,7 @@ public class IcicleGraphComponent extends JComponent {
                         Color.BLACK
                 };
             }
-            case CPP, KERNEL -> {
+            case NATIVE -> {
                 return new Color[] {
                         new Color(68, 197, 236),
                         new Color(54, 173, 209),
