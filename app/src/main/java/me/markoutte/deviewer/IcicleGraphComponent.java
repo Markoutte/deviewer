@@ -102,7 +102,7 @@ public class IcicleGraphComponent extends JComponent {
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
-                    int newY = rect.y;
+                    int newY = hoveredRectangle.depth * 24;
                     point = null;
                     hoveredRectangle = null;
                     animator.animate(Animations.animation(
@@ -167,8 +167,8 @@ public class IcicleGraphComponent extends JComponent {
             colors[value.ordinal()] = getFrameColor(value);
         }
         for (Rectangle rectangle : rectangles) {
-            int x = (int) (rectangle.start * bounds.width);
-            int width = (int) ((rectangle.end - rectangle.start) * bounds.width);
+            int x = (int) Math.floor(rectangle.start * bounds.width);
+            int width = (int) Math.ceil((rectangle.end - rectangle.start) * bounds.width);
             int y = rectangle.depth * 24;
             int height = 24;
             if (!rect.intersects(x, y, width, height) || width <= 1) {
@@ -176,13 +176,17 @@ public class IcicleGraphComponent extends JComponent {
             }
             boolean hovered = point != null && point.x > x && point.y > y && point.x < x + width && point.y < y + height;
             var clrs = colors[rectangle.frame.type().ordinal()];
-            Graphics2D g2 = (Graphics2D) g.create(x, y, width, height);
+            Graphics2D g2 = (Graphics2D) g.create(x, y, width + 1, height);
             g2.setColor(!hovered ? clrs[0] : clrs[1]);
-            g2.fillRect(0, 0, width, height);
+            g2.fillRect(0, 0, width + 1, height);
             g2.setColor(clrs[2]);
-            g2.drawRect(0, 0, width, height);
+            g2.drawLine(0, 0, 0, height);
+            g2.drawLine(width + 1, 0, width + 1, height);
+//            g2.drawLine(0, 0, width, 0);
+            g2.drawLine(0, height, width, height);
             g2.setColor(clrs[3]);
             int max = Math.max(0, rect.x - x);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g2.drawString(generateString(rectangle.frame, g2, width - 5), max + 5, 16);
             g2.dispose();
             if (hovered) {
