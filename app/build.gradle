@@ -49,6 +49,12 @@ application {
     mainClass = 'me.markoutte.deviewer.Main'
 }
 
+shadowJar{
+    mergeServiceFiles('META-INF/spring.*')
+    archiveBaseName = 'deviewer'
+    archiveVersion = '0.0.1'
+}
+
 // `apply plugin` stuffs are used with `buildscript`.
 apply plugin: 'java'
 apply plugin: 'com.gradleup.shadow'
