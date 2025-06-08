@@ -102,12 +102,11 @@ public class IcicleGraphComponent extends JComponent {
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
-                    int newY = hoveredRectangle.depth * 24;
                     point = null;
                     hoveredRectangle = null;
                     animator.animate(Animations.animation(
                             new java.awt.Rectangle(rect.x, rect.y, oldWidth, maxDepth * 24),
-                            new java.awt.Rectangle(newX, newY, newWidth, maxDepth * 24),
+                            new java.awt.Rectangle(newX, rect.y, newWidth, maxDepth * 24),
                             value -> {
                         try {
                             SwingUtilities.invokeAndWait(() -> {

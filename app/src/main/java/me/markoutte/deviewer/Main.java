@@ -116,6 +116,9 @@ public class Main {
             JScrollPane scrollPane2 = new JScrollPane(new CallTree(allFrame, stackTraces));
             scrollPane2.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
             tabbed.addTab("Call Tree", scrollPane2);
+            JScrollPane scrollPane3 = new JScrollPane(new MethodList(stackTraces));
+            scrollPane3.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+            tabbed.addTab("Method List", scrollPane3);
             panel.add(tabbed, BorderLayout.CENTER);
             panel.revalidate();
             panel.repaint();
