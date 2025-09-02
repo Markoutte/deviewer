@@ -41,6 +41,7 @@ public class IcicleGraphComponent extends JComponent {
     private Point point = null;
     private Rectangle hoveredRectangle = null;
     private JBAnimator animator = new JBAnimator();
+    private Tooltip tooltip = new Tooltip();
 
     public IcicleGraphComponent(StackFrame root, Trie<StackFrame, StackFrame> trie) {
         traverse(trie, trie.getImpl(Collections.singleton(root)), 0.0, 1.0, 0);
@@ -106,6 +107,7 @@ public class IcicleGraphComponent extends JComponent {
                         position.x + e.getX(),
                         position.y + e.getY()
                 );
+                tooltip.setLocation(e.getPoint());
                 repaint();
             }
         });
@@ -206,6 +208,8 @@ public class IcicleGraphComponent extends JComponent {
             g2.dispose();
             if (hovered) {
                 hoveredRectangle = rectangle;
+                tooltip.setStackFrame(rectangle.frame);
+                tooltip.setVisible(true);
             }
         }
     }
@@ -288,5 +292,29 @@ public class IcicleGraphComponent extends JComponent {
             }
         }
         throw new RuntimeException();
+    }
+
+    private static class Tooltip extends JWindow {
+
+        private StackFrame stackFrame;
+        private final JLabel label = new JLabel();
+
+        public Tooltip() {
+            getContentPane().add(label);
+        }
+
+        public void setStackFrame(StackFrame stackFrame) {
+            var oldStackFrame = this.stackFrame;
+            this.stackFrame = stackFrame;
+            if (stackFrame == null) {
+                label.setText("");
+            } else {
+                label.setText(stackFrame.className());
+            }
+            if (oldStackFrame != stackFrame) {
+                pack();
+                firePropertyChange("stackFrame", oldStackFrame, stackFrame);
+            }
+        }
     }
 }
