@@ -24,7 +24,6 @@ import com.intellij.util.animation.JBAnimator;
 import me.markoutte.deviewer.jfr.StackFrame;
 import me.markoutte.deviewer.jfr.StackFrameType;
 import me.markoutte.deviewer.utils.Trie;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
@@ -66,6 +65,7 @@ public class IcicleGraphComponent extends JComponent {
             }
         });
         viewport.addMouseWheelListener(e -> {
+            clearHover();
             Component comp = e.getComponent();
             if (e.isControlDown()) {
                 e.consume();
@@ -130,7 +130,6 @@ public class IcicleGraphComponent extends JComponent {
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
-                    final Point p = SwingUtilities.convertPoint(IcicleGraphComponent.this, point.x, point.y, viewport);
                     clearHover();
                     animator.animate(Animations.animation(
                             new java.awt.Rectangle(rect.x, rect.y, oldWidth, maxDepth * 24),
@@ -146,12 +145,7 @@ public class IcicleGraphComponent extends JComponent {
                         } catch (InterruptedException | InvocationTargetException ex) {
                             throw new RuntimeException(ex);
                         }
-                    }).setDuration(500).setEasing(Easing.EASE_IN_OUT).setDelay(8).addListener(phase -> {
-                        if (phase == Animation.Phase.EXPIRED) {
-                            point = SwingUtilities.convertPoint(viewport, p.x, p.y, IcicleGraphComponent.this);
-                            repaint();
-                        }
-                    }));
+                    }).setDuration(500).setEasing(Easing.EASE_IN_OUT).setDelay(8));
                 }
             }
 
@@ -329,13 +323,6 @@ public class IcicleGraphComponent extends JComponent {
 
     private static class Tooltip extends JWindow {
 
-        private static final FontMetrics MOCK = new FontMetrics(new Font(new HashMap<>())) {
-            @Override
-            public int stringWidth(@NotNull String str) {
-                return 0;
-            }
-        };
-
         private final JLabel className = new JLabel();
         private final JLabel methodName = new JLabel();
         private final JProgressBar progressBar = new JProgressBar();
@@ -377,12 +364,12 @@ public class IcicleGraphComponent extends JComponent {
         @Override
         public void dispose() {
             animator.close();
-            super.dispose();
         }
 
         public void setRectangle(Rectangle rectangle) {
             this.rectangle = rectangle;
             if (rectangle == null) {
+                className.setText("");
                 methodName.setText("");
                 progressBar.setMinimum(0);
                 progressBar.setMaximum(0);
