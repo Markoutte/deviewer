@@ -17,18 +17,23 @@
 package me.markoutte.deviewer;
 
 import com.intellij.ui.scroll.LatchingScroll;
+import com.intellij.util.animation.Animation;
 import com.intellij.util.animation.Animations;
 import com.intellij.util.animation.Easing;
 import com.intellij.util.animation.JBAnimator;
 import me.markoutte.deviewer.jfr.StackFrame;
 import me.markoutte.deviewer.jfr.StackFrameType;
 import me.markoutte.deviewer.utils.Trie;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -40,11 +45,11 @@ public class IcicleGraphComponent extends JComponent {
     private final double FACTOR = 1.05;
     private Point point = null;
     private Rectangle hoveredRectangle = null;
-    private JBAnimator animator = new JBAnimator();
-    private Tooltip tooltip = new Tooltip();
+    private final JBAnimator animator = new JBAnimator();
+    private final Tooltip tooltip = new Tooltip();
 
     public IcicleGraphComponent(StackFrame root, Trie<StackFrame, StackFrame> trie) {
-        traverse(trie, trie.getImpl(Collections.singleton(root)), 0.0, 1.0, 0);
+        traverse(trie, trie.getImpl(Collections.singleton(root)), null, 0.0, 1.0, 0);
     }
 
     @Override
@@ -107,7 +112,12 @@ public class IcicleGraphComponent extends JComponent {
                         position.x + e.getX(),
                         position.y + e.getY()
                 );
-                tooltip.setLocation(e.getPoint());
+                PointerInfo info = MouseInfo.getPointerInfo();
+                Point location = info.getLocation();
+                tooltip.setLocation(
+                        location.x,
+                        location.y - tooltip.getHeight() - 10
+                );
                 repaint();
             }
         });
@@ -120,8 +130,8 @@ public class IcicleGraphComponent extends JComponent {
                     scale = 1 / (hoveredRectangle.end - hoveredRectangle.start);
                     int newWidth = (int) Math.round(rect.width * scale);
                     int newX = (int) Math.round(newWidth * hoveredRectangle.start);
-                    point = null;
-                    hoveredRectangle = null;
+                    final Point p = SwingUtilities.convertPoint(IcicleGraphComponent.this, point.x, point.y, viewport);
+                    clearHover();
                     animator.animate(Animations.animation(
                             new java.awt.Rectangle(rect.x, rect.y, oldWidth, maxDepth * 24),
                             new java.awt.Rectangle(newX, rect.y, newWidth, maxDepth * 24),
@@ -136,12 +146,33 @@ public class IcicleGraphComponent extends JComponent {
                         } catch (InterruptedException | InvocationTargetException ex) {
                             throw new RuntimeException(ex);
                         }
-                    }).setDuration(500).setEasing(Easing.EASE_IN_OUT).setDelay(8));
+                    }).setDuration(500).setEasing(Easing.EASE_IN_OUT).setDelay(8).addListener(phase -> {
+                        if (phase == Animation.Phase.EXPIRED) {
+                            point = SwingUtilities.convertPoint(viewport, p.x, p.y, IcicleGraphComponent.this);
+                            repaint();
+                        }
+                    }));
                 }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                clearHover();
             }
         });
         // force resizing
         resizeComponent(0, 0, 1.0);
+    }
+
+    @Override
+    public void removeNotify() {
+        tooltip.dispose();
+    }
+
+    private void clearHover() {
+        point = null;
+        repaint();
+        tooltip.setRectangle(null);
     }
 
     private void resizeComponent(int mx, int my, double scale) {
@@ -160,15 +191,16 @@ public class IcicleGraphComponent extends JComponent {
         return super.getSize();
     }
 
-    private void traverse(Trie<StackFrame, StackFrame> trie, Trie.Node<StackFrame> node, double start, double end, int depth) {
+    private void traverse(Trie<StackFrame, StackFrame> trie, Trie.Node<StackFrame> node, @Nullable Rectangle parent, double start, double end, int depth) {
         maxDepth = Math.max(depth, maxDepth);
-        rectangles.add(new Rectangle(start, end, depth, node.getData()));
+        Rectangle rectangle = new Rectangle(start, end, depth, node.getHit(), node.getData(), parent);
+        rectangles.add(rectangle);
         List<Trie.Node<StackFrame>> children = trie.children(node);
         double s = start;
         double sc = end - start;
         for (Trie.Node<StackFrame> child : children) {
             double w = sc * (child.getHit() * 1.0 / node.getHit());
-            traverse(trie, child, s, s + w, depth + 1);
+            traverse(trie, child, rectangle, s, s + w, depth + 1);
             s += w;
         }
     }
@@ -183,6 +215,7 @@ public class IcicleGraphComponent extends JComponent {
         for (StackFrameType value : StackFrameType.values()) {
             colors[value.ordinal()] = getFrameColor(value);
         }
+        hoveredRectangle = null;
         for (Rectangle rectangle : rectangles) {
             int x = (int) Math.floor(rectangle.start * bounds.width);
             int width = (int) Math.ceil((rectangle.end - rectangle.start) * bounds.width);
@@ -204,24 +237,25 @@ public class IcicleGraphComponent extends JComponent {
             g2.setColor(clrs[3]);
             int max = Math.max(0, rect.x - x);
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g2.drawString(generateString(rectangle.frame, g2, width - 5), max + 5, 16);
+            g2.drawString(generateString(rectangle.frame, g2.getFontMetrics(), width - 5), max + 5, 16);
             g2.dispose();
             if (hovered) {
                 hoveredRectangle = rectangle;
-                tooltip.setStackFrame(rectangle.frame);
-                tooltip.setVisible(true);
             }
         }
+        tooltip.setRectangle(hoveredRectangle);
     }
 
     private record Rectangle(
             double start,
             double end,
             int depth,
-            StackFrame frame
+            int hit,
+            StackFrame frame,
+            Rectangle parent
     ) {}
 
-    private String generateString(StackFrame frame, Graphics2D g2d, int maxWidth) {
+    private static String generateString(StackFrame frame, FontMetrics fontMetrics, int maxWidth) {
         if (frame.type() == StackFrameType.INTERPRETED ||
                 frame.type() == StackFrameType.JIT_COMPILED ||
                 frame.type() == StackFrameType.C1_COMPILED ||
@@ -231,7 +265,6 @@ public class IcicleGraphComponent extends JComponent {
                 return frame.methodName();
             } else {
                 String fullName = "%s.%s".formatted(frame.className(), frame.methodName());
-                FontMetrics fontMetrics = g2d.getFontMetrics();
                 if (fontMetrics.stringWidth(fullName) < maxWidth) {
                     return fullName;
                 }
@@ -296,24 +329,80 @@ public class IcicleGraphComponent extends JComponent {
 
     private static class Tooltip extends JWindow {
 
-        private StackFrame stackFrame;
-        private final JLabel label = new JLabel();
+        private static final FontMetrics MOCK = new FontMetrics(new Font(new HashMap<>())) {
+            @Override
+            public int stringWidth(@NotNull String str) {
+                return 0;
+            }
+        };
+
+        private final JLabel className = new JLabel();
+        private final JLabel methodName = new JLabel();
+        private final JProgressBar progressBar = new JProgressBar();
+        private final JBAnimator animator = new JBAnimator();
+        private Rectangle rectangle;
 
         public Tooltip() {
-            getContentPane().add(label);
+            JPanel content = new JPanel();
+            content.setLayout(new BorderLayout());
+            getContentPane().add(content);
+            content.setBorder(new EmptyBorder(5, 5, 5, 5));
+            var center = new JPanel();
+            center.setLayout(new BoxLayout(center, BoxLayout.Y_AXIS));
+            content.add(center, BorderLayout.CENTER);
+            center.add(className);
+            center.add(methodName);
+
+            JPanel status = new JPanel();
+            status.setLayout(new BoxLayout(status, BoxLayout.Y_AXIS));
+            status.setBorder(new EmptyBorder(5, 0, 0, 0));
+            status.add(progressBar);
+
+            content.add(status, BorderLayout.SOUTH);
+
+            className.setForeground(Color.GRAY);
+            progressBar.setAlignmentX(0.0f);
+            progressBar.setStringPainted(true);
+            progressBar.setMaximumSize(new Dimension(200, 100));
+            progressBar.setMinimumSize(new Dimension(200, 0));
+
+            animator.setCyclic(true);
+            animator.setPeriod(100);
+            animator.setType(JBAnimator.Type.EACH_FRAME);
+            animator.animate(new Animation(v -> {
+                setVisible(rectangle != null);
+            }).setEasing(Easing.LINEAR).setDelay(0).setDuration(250));
         }
 
-        public void setStackFrame(StackFrame stackFrame) {
-            var oldStackFrame = this.stackFrame;
-            this.stackFrame = stackFrame;
-            if (stackFrame == null) {
-                label.setText("");
+        @Override
+        public void dispose() {
+            animator.close();
+            super.dispose();
+        }
+
+        public void setRectangle(Rectangle rectangle) {
+            this.rectangle = rectangle;
+            if (rectangle == null) {
+                methodName.setText("");
+                progressBar.setMinimum(0);
+                progressBar.setMaximum(0);
+                progressBar.setValue(0);
             } else {
-                label.setText(stackFrame.className());
-            }
-            if (oldStackFrame != stackFrame) {
+                var frame = rectangle.frame;
+                className.setText(frame.className());
+                methodName.setText("%s(%s)".formatted(
+                        frame.methodName(),
+                        String.join(", ", frame.parameters().stream().map(s -> {
+                            int i = s.lastIndexOf('.');
+                            return i >= 0 ? s.substring(i + 1) : s;
+                        }).toList())));
+                int parentHit = rectangle.parent == null ? rectangle.hit : rectangle.parent.hit;
+                int currentHit = rectangle.hit;
+                progressBar.setMinimum(0);
+                progressBar.setMaximum(parentHit);
+                progressBar.setValue(currentHit);
+                progressBar.setString("%d / %d (%.0f %%)".formatted(currentHit, parentHit, currentHit * 100f / parentHit));
                 pack();
-                firePropertyChange("stackFrame", oldStackFrame, stackFrame);
             }
         }
     }

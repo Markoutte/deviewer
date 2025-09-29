@@ -32,6 +32,9 @@ import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.List;
 
@@ -91,6 +94,16 @@ public class Main {
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setBounds(0, 0, 640, 480);
         frame.setVisible(true);
+
+        SwingUtilities.invokeLater(() -> {
+            if (args.length > 0) {
+                String userPath = args[0];
+                Path path = Paths.get(userPath);
+                if (Files.exists(path)) {
+                    reload(panel, path.toFile());
+                }
+            }
+        });
     }
 
     private static void reload(JComponent panel, File file) {
