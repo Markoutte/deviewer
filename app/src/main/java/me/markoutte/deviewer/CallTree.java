@@ -95,8 +95,7 @@ public class CallTree extends JTree {
                                     frame.methodName(),
                                     String.join(",", frame.parameters())
                             ),
-                            frame.className(),
-                            "frame.method()"
+                            frame.className()
                     ));
                 }
                 return component;
