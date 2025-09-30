@@ -132,7 +132,8 @@ public class Main {
             var tabbed = new JTabbedPane();
             tabbed.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
             JPanel emptyPane = new JPanel();
-            emptyPane.setBorder(new EmptyBorder(0, 60, 0, 0));
+            int padding = SystemInfo.isMacOS ? 60 : 0;
+            emptyPane.setBorder(new EmptyBorder(0, padding, 0, 0));
             tabbed.putClientProperty("JTabbedPane.leadingComponent", emptyPane);
             IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
             JScrollPane scrollPane1 = new JScrollPane(icicleGraphComponent);

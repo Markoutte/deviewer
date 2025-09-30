@@ -93,6 +93,7 @@ public class IcicleGraphComponent extends JComponent {
             @Override
             public void mouseDragged(MouseEvent e) {
                 if (start != null) {
+                    clearHover();
                     JViewport viewport = (JViewport) e.getComponent();
                     viewport.setViewPosition(new Point(
                             Math.max(0, viewport.getViewPosition().x + start.x - e.getX()),
