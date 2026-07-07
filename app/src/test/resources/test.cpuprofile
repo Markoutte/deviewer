@@ -1,3 +1,5 @@
+// See https://push-based.io/article/advanced-cpu-profiling-in-node-profile-data-structure
+
 {
   "nodes": [
     {

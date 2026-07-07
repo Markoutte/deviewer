@@ -20,6 +20,7 @@ import com.alibaba.fastjson2.JSON;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.util.SystemInfo;
 import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
+import me.markoutte.deviewer.cpuprofiler.CallFrame;
 import me.markoutte.deviewer.cpuprofiler.CpuProfiler;
 import me.markoutte.deviewer.cpuprofiler.Node;
 import me.markoutte.deviewer.jfr.StackFrame;
@@ -132,22 +133,34 @@ public class Main {
             StackFrame[] stackFrames = new StackFrame[data.getNodes().length + 1];
             stackFrames[0] = allFrame;
             int[] parents = new int[stackFrames.length];
+            Node[] nodes = new Node[stackFrames.length];
+            for (Node node : data.getNodes()) {
+                if (nodes[node.getId()] != null) {
+                    throw new AssertionError("Node " + node.getId() + " is not null");
+                }
+                nodes[node.getId()] = node;
+            }
 
             IntArrayFIFOQueue queue = new IntArrayFIFOQueue();
             queue.enqueue(1);
             while (!queue.isEmpty()) {
                 int nodeId = queue.dequeueInt();
-                Node node = data.getNodes()[nodeId - 1];
-                if (node.getId() != nodeId) {
-                    throw new AssertionError("IDs don't match");
-                }
+                Node node = nodes[nodeId];
                 if (stackFrames[nodeId] == null) {
+                    var type = StackFrameType.INTERPRETED;
+                    CallFrame frame = node.getCallFrame();
+                    if (Objects.equals(frame.getUrl(), "")) {
+                        type = StackFrameType.KERNEL;
+                    }
+                    if (frame.getUrl().startsWith("internal")) {
+                        type = StackFrameType.NATIVE;
+                    }
                     stackFrames[nodeId] = new StackFrame(
-                            node.getCallFrame().getUrl() + ":" + (node.getCallFrame().getLineNumber() + 1),
-                            Optional.of(node.getCallFrame().getFunctionName()).map(x -> x.isBlank() ? "(anonymous)" : x).get(),
+                            frame.getUrl() + ":" + (frame.getLineNumber() + 1),
+                            Optional.of(frame.getFunctionName()).map(x -> x.isBlank() ? "(anonymous)" : x).get(),
                             Collections.emptyList(),
                             "",
-                            StackFrameType.NATIVE
+                            type
 
                     );
                 }
