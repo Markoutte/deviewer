@@ -16,8 +16,12 @@
 
 package me.markoutte.deviewer;
 
+import com.alibaba.fastjson2.JSON;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.formdev.flatlaf.util.SystemInfo;
+import it.unimi.dsi.fastutil.ints.IntArrayFIFOQueue;
+import me.markoutte.deviewer.cpuprofiler.CpuProfiler;
+import me.markoutte.deviewer.cpuprofiler.Node;
 import me.markoutte.deviewer.jfr.StackFrame;
 import me.markoutte.deviewer.jfr.StackFrameType;
 import me.markoutte.deviewer.utils.Trie;
@@ -31,6 +35,7 @@ import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -106,11 +111,76 @@ public class Main {
         });
     }
 
-    private static void reload(JComponent panel, File file) {
+    private static StackFrame loadData(File file, Trie<StackFrame, StackFrame> stackTraces) {
+        String[] parts = file.getName().split("\\.");
+        var extension = parts[parts.length - 1];
+        switch (extension) {
+            case "jfr":
+                return loadJfrData(file, stackTraces);
+            case "cpuprofile":
+                return loadCpuProfilerData(file, stackTraces);
+            default:
+                throw new IllegalStateException("Unexpected value: " + extension);
+        }
+    }
+
+    private static StackFrame loadCpuProfilerData(File file, Trie<StackFrame, StackFrame> stackTraces) {
+        try (var is = new FileInputStream(file)) {
+            CpuProfiler data = JSON.parseObject(is, CpuProfiler.class);
+
+            StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.UNDEFINED);
+            StackFrame[] stackFrames = new StackFrame[data.getNodes().length + 1];
+            stackFrames[0] = allFrame;
+            int[] parents = new int[stackFrames.length];
+
+            IntArrayFIFOQueue queue = new IntArrayFIFOQueue();
+            queue.enqueue(1);
+            while (!queue.isEmpty()) {
+                int nodeId = queue.dequeueInt();
+                Node node = data.getNodes()[nodeId - 1];
+                if (node.getId() != nodeId) {
+                    throw new AssertionError("IDs don't match");
+                }
+                if (stackFrames[nodeId] == null) {
+                    stackFrames[nodeId] = new StackFrame(
+                            node.getCallFrame().getUrl() + ":" + (node.getCallFrame().getLineNumber() + 1),
+                            Optional.of(node.getCallFrame().getFunctionName()).map(x -> x.isBlank() ? "(anonymous)" : x).get(),
+                            Collections.emptyList(),
+                            "",
+                            StackFrameType.NATIVE
+
+                    );
+                }
+                for (int childId : node.getChildren()) {
+                    parents[childId] = nodeId == 1 ? 0 : nodeId;
+                    queue.enqueue(childId);
+                }
+            }
+
+            // eagerly add first shift
+            long absoluteTime = data.getStartTime() + data.getTimeDeltas()[0];
+            for (int i = 0; i < data.getSamples().length; i++) {
+                var currentId = data.getSamples()[i];
+                var list = new LinkedList<StackFrame>();
+                while (currentId > 0) {
+                    list.add(0, stackFrames[currentId]);
+                    currentId = parents[currentId];
+                }
+                list.add(0, stackFrames[0]);
+                int delta = i < data.getSamples().length - 1 ? data.getTimeDeltas()[i + 1] : (int) (data.getEndTime() - absoluteTime);
+                absoluteTime += delta;
+                stackTraces.add(list, delta);
+            }
+            return allFrame;
+        } catch (IOException exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private static StackFrame loadJfrData(File file, Trie<StackFrame, StackFrame> stackTraces) {
         try (var reader = new JfrReader(file.getAbsolutePath())) {
             Event event;
             var eventsByGroup = new HashMap<Class<? extends Event>, List<Event>>();
-            var stackTraces = new Trie<StackFrame, StackFrame>(input -> input);
             StackFrame allFrame = new StackFrame(null, "Everything", Collections.emptyList(), null, StackFrameType.UNDEFINED);
             while ((event = reader.readEvent()) != null) {
                 eventsByGroup.computeIfAbsent(event.getClass(), eventClass -> new ArrayList<>()).add(event);
@@ -128,33 +198,39 @@ public class Main {
                     stackTraces.add(chain);
                 }
             }
-            panel.removeAll();
-            var tabbed = new JTabbedPane();
-            tabbed.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-            JPanel emptyPane = new JPanel();
-            int padding = SystemInfo.isMacOS ? 60 : 0;
-            emptyPane.setBorder(new EmptyBorder(0, padding, 0, 0));
-            tabbed.putClientProperty("JTabbedPane.leadingComponent", emptyPane);
-            IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
-            JScrollPane scrollPane1 = new JScrollPane(icicleGraphComponent);
-            scrollPane1.putClientProperty("JScrollPane.smoothScrolling", true);
-            scrollPane1.getVerticalScrollBar().setUnitIncrement(24);
-            scrollPane1.getHorizontalScrollBar().setUnitIncrement(24);
-            scrollPane1.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
-            scrollPane1.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-            tabbed.addTab("Icicle Graph", scrollPane1);
-            JScrollPane scrollPane2 = new JScrollPane(new CallTree(allFrame, stackTraces));
-            scrollPane2.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
-            tabbed.addTab("Call Tree", scrollPane2);
-            JScrollPane scrollPane3 = new JScrollPane(new MethodList(stackTraces));
-            scrollPane3.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
-            tabbed.addTab("Method List", scrollPane3);
-            panel.add(tabbed, BorderLayout.CENTER);
-            panel.revalidate();
-            panel.repaint();
+            return allFrame;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static void reload(JComponent panel, File file) {
+        panel.removeAll();
+        var tabbed = new JTabbedPane();
+        tabbed.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        JPanel emptyPane = new JPanel();
+        int padding = SystemInfo.isMacOS ? 60 : 0;
+        emptyPane.setBorder(new EmptyBorder(0, padding, 0, 0));
+        tabbed.putClientProperty("JTabbedPane.leadingComponent", emptyPane);
+        var stackTraces = new Trie<StackFrame, StackFrame>(input -> input);
+        var allFrame = loadData(file, stackTraces);
+        IcicleGraphComponent icicleGraphComponent = new IcicleGraphComponent(allFrame, stackTraces);
+        JScrollPane scrollPane1 = new JScrollPane(icicleGraphComponent);
+        scrollPane1.putClientProperty("JScrollPane.smoothScrolling", true);
+        scrollPane1.getVerticalScrollBar().setUnitIncrement(24);
+        scrollPane1.getHorizontalScrollBar().setUnitIncrement(24);
+        scrollPane1.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_ALWAYS);
+        scrollPane1.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+        tabbed.addTab("Icicle Graph", scrollPane1);
+        JScrollPane scrollPane2 = new JScrollPane(new CallTree(allFrame, stackTraces));
+        scrollPane2.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+        tabbed.addTab("Call Tree", scrollPane2);
+        JScrollPane scrollPane3 = new JScrollPane(new MethodList(stackTraces));
+        scrollPane3.getViewport().setScrollMode(JViewport.BACKINGSTORE_SCROLL_MODE);
+        tabbed.addTab("Method List", scrollPane3);
+        panel.add(tabbed, BorderLayout.CENTER);
+        panel.revalidate();
+        panel.repaint();
 
     }
 

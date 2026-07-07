@@ -38,6 +38,10 @@ public class Trie<T, K> implements Iterable<List<T>> {
      * @return corresponding Node of the last element in the `values`
      */
     public Node<T> add(Iterable<T> values) {
+        return add(values, 1);
+    }
+
+    public Node<T> add(Iterable<T> values, int hits) {
         Iterator<T> iterator = values.iterator();
         if (!iterator.hasNext()) {
             throw new IllegalArgumentException("Empty list are not allowed");
@@ -45,13 +49,13 @@ public class Trie<T, K> implements Iterable<List<T>> {
         T root = iterator.next();
         K key = keyExtractor.extractKey(root);
         NodeImpl<T, K> node = roots.computeIfAbsent(key, k -> new NodeImpl<>(root, null));
-        node.hit++;
+        node.hit += hits;
         while (iterator.hasNext()) {
             T value = iterator.next();
             key = keyExtractor.extractKey(value);
             final var fNode = node;
             node = node.children.computeIfAbsent(key, k -> new NodeImpl<>(value, fNode));
-            node.hit++;
+            node.hit += hits;
         }
         node.count++;
         implementations.put(node, node);
